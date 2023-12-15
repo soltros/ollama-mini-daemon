@@ -13,21 +13,26 @@ def run_command():
 
 def handle_client(client_socket, command_process):
     with client_socket:
-        while True:
-            data = client_socket.recv(1024).decode()
-            if data.lower() == 'shutdown':
-                command_process.terminate()
-                sys.exit(0)
+        try:
+            while True:
+                data = client_socket.recv(1024).decode()
+                if not data:
+                    break
+                if data.lower() == 'shutdown':
+                    command_process.terminate()
+                    break
+        except ConnectionResetError:
+            pass  # Handle client disconnecting
 
 def start_server(command_process):
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(('localhost', 5000))
-    server.listen()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.bind(('localhost', 5000))
+        server.listen()
 
-    while True:
-        client_socket, addr = server.accept()
-        client_thread = threading.Thread(target=handle_client, args=(client_socket, command_process))
-        client_thread.start()
+        while True:
+            client_socket, addr = server.accept()
+            client_thread = threading.Thread(target=handle_client, args=(client_socket, command_process))
+            client_thread.start()
 
 def daemonize():
     if os.fork() > 0:
@@ -48,10 +53,7 @@ def daemonize():
         os.dup2(f.fileno(), sys.stdout.fileno())
         os.dup2(f.fileno(), sys.stderr.fileno())
 
-    def on_sigterm(signum, frame):
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, on_sigterm)
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
 
 def main():
     daemonize()
@@ -61,4 +63,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
